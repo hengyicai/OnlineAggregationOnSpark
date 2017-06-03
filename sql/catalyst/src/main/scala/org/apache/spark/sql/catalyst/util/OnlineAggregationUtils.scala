@@ -34,6 +34,14 @@ object commonMath {
       historicalSamples.measures.appendDelta(deltaSamples.measures).variance
 
   }
+
+  // 根据 errorBound, samplesCount 和 T 计算置信度 P,
+  // T 需要在对应的聚合函数里增量求得.
+  def calcConfidence(errorBound: Double,
+                     samplesCount: Int,
+                     T_Denominator: Double): Double = {
+    2 * CNDF((errorBound * math.sqrt(samplesCount)) / T_Denominator) - 1
+  }
 }
 
 case class DeltaVarianceMeasures(n: Int, sum: Double, variance: Double) {

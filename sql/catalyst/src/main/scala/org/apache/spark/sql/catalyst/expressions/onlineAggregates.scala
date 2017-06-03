@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
-
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.util.collection.OpenHashSet
+
+import scala.collection.mutable.ListBuffer
 
 class OnlineResult(result: Any, internal: Double, zone: Double) {
 
@@ -383,6 +384,8 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
   private var count: Long = _
   private val sum = MutableLiteral(zero.eval(null), calcType)
   private val batchSize = 100
+  private var batch = new ListBuffer[Double]()
+  private var batchPivot = 0
 
   private def addFunction(value: Any) = Add(sum, Cast(Literal(value, expr.dataType), calcType))
 
@@ -413,6 +416,7 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
     if (evaluatedExpr != null) {
       count += 1
       sum.update(addFunction(evaluatedExpr), input)
+
     }
   }
 }
