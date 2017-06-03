@@ -99,7 +99,7 @@ case class OnlineMax(child: Expression) extends PartialAggregate with trees.Unar
     SplitEvaluation(Max(partialMax.toAttribute), partialMax :: Nil)
   }
 
-  override def newInstance() = new MaxFunction(child, this)
+  override def newInstance() = new OnlineMaxFunction(child, this)
 }
 
 case class OnlineMaxFunction(expr: Expression, base: AggregateExpression)
@@ -134,7 +134,7 @@ case class OnlineCount(child: Expression)
     SplitEvaluation(Coalesce(Seq(Sum(partialCount.toAttribute), Literal(0L))), partialCount :: Nil)
   }
 
-  override def newInstance() = new CountFunction(child, this)
+  override def newInstance() = new OnlineCountFunction(child, this)
 }
 
 case class OnlineCountDistinct(expressions: Seq[Expression]) extends PartialAggregate {
@@ -169,7 +169,7 @@ case class OnlineCollectHashSet(expressions: Seq[Expression]) extends AggregateE
 
   override def toString = s"AddToHashSet(${expressions.mkString(",")})"
 
-  override def newInstance() = new CollectHashSetFunction(expressions, this)
+  override def newInstance() = new OnlineCollectHashSetFunction(expressions, this)
 }
 
 case class OnlineCollectHashSetFunction(
@@ -207,7 +207,7 @@ case class OnlineCombineSetsAndCount(inputSet: Expression) extends AggregateExpr
 
   override def toString = s"CombineAndCount($inputSet)"
 
-  override def newInstance() = new CombineSetsAndCountFunction(inputSet, this)
+  override def newInstance() = new OnlineCombineSetsAndCountFunction(inputSet, this)
 }
 
 case class OnlineCombineSetsAndCountFunction(
@@ -327,7 +327,7 @@ case class OnlineSumDistinct(child: Expression)
 
   override def toString = s"SUM(DISTINCT ${child})"
 
-  override def newInstance() = new SumDistinctFunction(child, this)
+  override def newInstance() = new OnlineSumDistinctFunction(child, this)
 
   override def asPartial = {
     val partialSet = Alias(CollectHashSet(child :: Nil), "partialSets")()
@@ -349,7 +349,7 @@ case class OnlineCombineSetsAndSum(inputSet: Expression, base: Expression)
 
   override def toString = s"CombineAndSum($inputSet)"
 
-  override def newInstance() = new CombineSetsAndSumFunction(inputSet, this)
+  override def newInstance() = new OnlineCombineSetsAndSumFunction(inputSet, this)
 }
 
 case class OnlineCombineSetsAndSumFunction(
@@ -434,7 +434,6 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
     val T = math.sqrt(historicalVar)
     val errorBound: Double = 2.0
     val confidence = commonMath.calcConfidence(errorBound, count, T)
-
 
     new OnlineResult(resVal, confidence, errorBound)
   }
