@@ -434,6 +434,7 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
         } / batch.length
 
         var hCount = count - batchSize
+
         var crtAvg = expr.dataType match {
           case DecimalType.Fixed(_, _) =>
             Cast(Divide(
@@ -451,11 +452,14 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
             Cast(sum, dataType).eval(null)
         }
 
-        historicalVar = (
+
+        historicalVar = if (hCount == 0) batchVar else (
           hCount * (historicalVar + math.pow(crtAvg.asInstanceOf[Double] - historicalAvg, 2.0)) +
             batchSize * (batchVar + math.pow(crtAvg.asInstanceOf[Double] - batchAvg, 2.0))
           ) / (hCount + batchSize)
-        historicalAvg = (crtSum.asInstanceOf[Double] - batch.sum) / (count - batch.length)
+
+        historicalAvg = if (hCount == 0) batchAvg else (
+          crtSum.asInstanceOf[Double] - batch.sum) / (count - batch.length)
 
         // 增量更新完毕，清空 batch
         batch.clear()
