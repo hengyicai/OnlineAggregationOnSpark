@@ -27,8 +27,7 @@ import org.apache.spark.util.collection.OpenHashSet
 import scala.collection.mutable.ListBuffer
 
 
-class OnlineResult(result: Any,confidence: Double, bound: Double){
-
+class OnlineResult(result: Any, confidence: Double, bound: Double) {
 
 
   override def toString: String = s"$result # $confidence # $bound"
@@ -39,9 +38,11 @@ class OnlineResult(result: Any,confidence: Double, bound: Double){
 case class OnlineMin(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
   println("onlineMin initialize ")
+
   override def nullable = true
+
   // override def dataType = child.dataType
-  override def dataType:DataType = StringType
+  override def dataType: DataType = StringType
 
   override def toString = s"OnlineMIN($child)"
 
@@ -55,7 +56,7 @@ case class OnlineMin(child: Expression) extends PartialAggregate with trees.Unar
 
 // change the eval out to a OnlineResult object
 case class OnlineMinFunction(expr: Expression, base: AggregateExpression)
-  extends AggregateFunction with Logging{
+  extends AggregateFunction with Logging {
   logError("onlineMin Func initialize ")
 
   def this() = this(null, null) // Required for serialization.
@@ -75,11 +76,13 @@ case class OnlineMinFunction(expr: Expression, base: AggregateExpression)
     logError("come into online aggregate update")
   }
 
-  override def eval(input: Row): Any ={
+  override def eval(input: Row): Any = {
     logError("come into online aggregate update")
     s"1 # $mockInternal # $mockZone".asInstanceOf[StringType]
   }
-//  override def eval(input: Row): Any = new OnlineResult(currentMin.value, mockInternal, mockZone)
+
+  // override def eval(input: Row): Any =
+  // new OnlineResult(currentMin.value, mockInternal, mockZone)
 
 }
 
@@ -467,12 +470,14 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
         Cast(sum, dataType).eval(null)
     }
 
-    historicalVar = if (hCount == 0) batchVar else (
+    historicalVar = if (hCount == 0) batchVar
+    else (
       hCount * (historicalVar + math.pow(crtAvg.asInstanceOf[Double] - historicalAvg, 2.0)) +
         batchSize * (batchVar + math.pow(crtAvg.asInstanceOf[Double] - batchAvg, 2.0))
       ) / (hCount + batchSize)
 
-    historicalAvg = if (hCount == 0) batchAvg else (
+    historicalAvg = if (hCount == 0) batchAvg
+    else (
       crtSum.asInstanceOf[Double] - batch.sum) / (count - batch.length)
   }
 
@@ -497,20 +502,46 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
 
 case class OnlineCountFunction(expr: Expression, base: AggregateExpression)
   extends AggregateFunction {
+
+
   def this() = this(null, null) // Required for serialization.
 
   var count: Long = _
+  var sum_count: Long = _ // table 里面的元组数量
+
+  var sample_count: Long = _ // sample提取的数量
+
+  var probility: Double = 0.8
+  var interval: Double = _
+
+  var square_sum: Double = _
+  var sum_square: Double = _
+
+  var deta: Double = _
+
+  var probility_interval: Boolean = true
 
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.eval(input)
+    sample_count += 1L
     if (evaluatedExpr != null) {
       count += 1L
+      sum_square = count
+      square_sum = square_sum + 1L
+      deta = sum_count * sum_count * square_sum -
+        sum_count * sum_count * sum_square * sum_square / sample_count / sample_count
+
+      if (probility_interval) {
+        probility_interval = false
+        interval = (1 + probility) / 2 * math.pow(math.pow(deta, 1 / 2) / sample_count, 1 / 2)
+      }
+      else {
+        probility_interval = true
+        probility = interval * math.pow(sample_count, 1 / 2) / math.pow(deta, 1 / 2) * 2 - 1
+      }
     }
   }
-
-  override def eval(input: Row): Any = count
 }
-
 
 case class OnlineSumFunction(expr: Expression, base: AggregateExpression)
   extends AggregateFunction {
@@ -606,6 +637,9 @@ case class OnlineCountDistinctFunction(
   }
 
   override def eval(input: Row): Any = seen.size.toLong
+
 }
+
+
 
 
