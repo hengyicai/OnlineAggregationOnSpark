@@ -72,7 +72,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
     expr.toLowerCase match {
       case "avg" | "average" | "mean" => Average
       case "max" => Max
-      case "min" => Min
+      case "min" => OnlineMin
       case "sum" => Sum
       case "count" | "size" =>
         // Turn count(*) into count(1)
@@ -198,7 +198,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Average)
+    aggregateNumericColumns(colNames:_*)(OnlineAverage)
   }
 
   /**
