@@ -26,13 +26,15 @@ import org.apache.spark.util.collection.OpenHashSet
 
 class OnlineResult(result: Any,internal: Double, zone: Double){
 
+  override def toString: String = s"$result # $internal # $zone"
+
 }
 
 case class OnlineMin(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable = true
   override def dataType = child.dataType
-  override def toString = s"MIN($child)"
+  override def toString = s"OnlineMIN($child)"
 
   override def asPartial: SplitEvaluation = {
     val partialMin = Alias(Min(child), "PartialMin")()
