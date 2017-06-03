@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.util.collection.OpenHashSet
 
-class OnlineResult(result: Any,internal: Double, zone: Double){
+class OnlineResult(result: Any, internal: Double, zone: Double) {
 
   override def toString: String = s"$result # $internal # $zone"
 
@@ -33,7 +33,9 @@ class OnlineResult(result: Any,internal: Double, zone: Double){
 case class OnlineMin(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable = true
+
   override def dataType = child.dataType
+
   override def toString = s"OnlineMIN($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -58,19 +60,21 @@ case class OnlineMinFunction(expr: Expression, base: AggregateExpression)
   override def update(input: Row): Unit = {
     if (currentMin.value == null) {
       currentMin.value = expr.eval(input)
-    } else if(cmp.eval(input) == true) {
+    } else if (cmp.eval(input) == true) {
       currentMin.value = expr.eval(input)
     }
   }
 
-  override def eval(input: Row): Any = new OnlineResult(currentMin.value,mockInternal,mockZone)
+  override def eval(input: Row): Any = new OnlineResult(currentMin.value, mockInternal, mockZone)
 
 }
 
 case class OnlineMax(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable = true
+
   override def dataType = child.dataType
+
   override def toString = s"MAX($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -91,7 +95,7 @@ case class OnlineMaxFunction(expr: Expression, base: AggregateExpression)
   override def update(input: Row): Unit = {
     if (currentMax.value == null) {
       currentMax.value = expr.eval(input)
-    } else if(cmp.eval(input) == true) {
+    } else if (cmp.eval(input) == true) {
       currentMax.value = expr.eval(input)
     }
   }
@@ -103,7 +107,9 @@ case class OnlineCount(child: Expression)
   extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable = false
+
   override def dataType = LongType
+
   override def toString = s"COUNT($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -120,8 +126,11 @@ case class OnlineCountDistinct(expressions: Seq[Expression]) extends PartialAggr
   override def children = expressions
 
   override def nullable = false
+
   override def dataType = LongType
+
   override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")})"
+
   override def newInstance() = new CountDistinctFunction(expressions, this)
 
   override def asPartial = {
@@ -136,15 +145,19 @@ case class OnlineCollectHashSet(expressions: Seq[Expression]) extends AggregateE
   def this() = this(null)
 
   override def children = expressions
+
   override def nullable = false
+
   override def dataType = ArrayType(expressions.head.dataType)
+
   override def toString = s"AddToHashSet(${expressions.mkString(",")})"
+
   override def newInstance() = new CollectHashSetFunction(expressions, this)
 }
 
 case class OnlineCollectHashSetFunction(
-    @transient expr: Seq[Expression],
-    @transient base: AggregateExpression)
+                                         @transient expr: Seq[Expression],
+                                         @transient base: AggregateExpression)
   extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
@@ -170,15 +183,19 @@ case class OnlineCombineSetsAndCount(inputSet: Expression) extends AggregateExpr
   def this() = this(null)
 
   override def children = inputSet :: Nil
+
   override def nullable = false
+
   override def dataType = LongType
+
   override def toString = s"CombineAndCount($inputSet)"
+
   override def newInstance() = new CombineSetsAndCountFunction(inputSet, this)
 }
 
 case class OnlineCombineSetsAndCountFunction(
-    @transient inputSet: Expression,
-    @transient base: AggregateExpression)
+                                              @transient inputSet: Expression,
+                                              @transient base: AggregateExpression)
   extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
@@ -204,7 +221,7 @@ case class OnlineAverage(child: Expression)
 
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 4, scale + 4)  // Add 4 digits after decimal point, like Hive
+      DecimalType(precision + 4, scale + 4) // Add 4 digits after decimal point, like Hive
     case DecimalType.Unlimited =>
       DecimalType.Unlimited
     case _ =>
@@ -238,7 +255,7 @@ case class OnlineAverage(child: Expression)
     }
   }
 
-  override def newInstance() = new AverageFunction(child, this)
+  override def newInstance() = new OnlineAverageFunction(child, this)
 }
 
 case class OnlineSum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -247,7 +264,7 @@ case class OnlineSum(child: Expression) extends PartialAggregate with trees.Unar
 
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
+      DecimalType(precision + 10, scale) // Add 10 digits left of decimal point, like Hive
     case DecimalType.Unlimited =>
       DecimalType.Unlimited
     case _ =>
@@ -279,16 +296,20 @@ case class OnlineSumDistinct(child: Expression)
   extends PartialAggregate with trees.UnaryNode[Expression] {
 
   def this() = this(null)
+
   override def nullable = true
+
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
+      DecimalType(precision + 10, scale) // Add 10 digits left of decimal point, like Hive
     case DecimalType.Unlimited =>
       DecimalType.Unlimited
     case _ =>
       child.dataType
   }
+
   override def toString = s"SUM(DISTINCT ${child})"
+
   override def newInstance() = new SumDistinctFunction(child, this)
 
   override def asPartial = {
@@ -304,15 +325,19 @@ case class OnlineCombineSetsAndSum(inputSet: Expression, base: Expression)
   def this() = this(null, null)
 
   override def children = inputSet :: Nil
+
   override def nullable = true
+
   override def dataType = base.dataType
+
   override def toString = s"CombineAndSum($inputSet)"
+
   override def newInstance() = new CombineSetsAndSumFunction(inputSet, this)
 }
 
 case class OnlineCombineSetsAndSumFunction(
-    @transient inputSet: Expression,
-    @transient base: AggregateExpression)
+                                            @transient inputSet: Expression,
+                                            @transient base: AggregateExpression)
   extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
@@ -357,14 +382,19 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
 
   private var count: Long = _
   private val sum = MutableLiteral(zero.eval(null), calcType)
+  private val batchSize = 100
 
   private def addFunction(value: Any) = Add(sum, Cast(Literal(value, expr.dataType), calcType))
 
   override def eval(input: Row): Any = {
+    var resVal: Any = null
+    var confidence: Double = 1.0
+    var errorBound: Double = 0.05
+
     if (count == 0L) {
       null
     } else {
-      expr.dataType match {
+      resVal = expr.dataType match {
         case DecimalType.Fixed(_, _) =>
           Cast(Divide(
             Cast(sum, DecimalType.Unlimited),
@@ -375,6 +405,7 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
             Cast(Literal(count), dataType)).eval(null)
       }
     }
+    new OnlineResult(resVal, confidence, errorBound)
   }
 
   override def update(input: Row): Unit = {
@@ -461,8 +492,8 @@ case class OnlineSumDistinctFunction(expr: Expression, base: AggregateExpression
 }
 
 case class OnlineCountDistinctFunction(
-    @transient expr: Seq[Expression],
-    @transient base: AggregateExpression)
+                                        @transient expr: Seq[Expression],
+                                        @transient base: AggregateExpression)
   extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
