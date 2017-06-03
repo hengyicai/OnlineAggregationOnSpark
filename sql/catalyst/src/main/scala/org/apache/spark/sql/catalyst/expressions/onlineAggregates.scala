@@ -290,7 +290,7 @@ case class OnlineSum(child: Expression) extends PartialAggregate with trees.Unar
     }
   }
 
-  override def newInstance() = new SumFunction(child, this)
+  override def newInstance() = new OnlineSumFunction(child, this)
 }
 
 case class OnlineSumDistinct(child: Expression)
@@ -383,9 +383,15 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
 
   private var count: Long = _
   private val sum = MutableLiteral(zero.eval(null), calcType)
+  // 每一批数据的大小
   private val batchSize = 100
+  // 存储当前批数据
   private var batch = new ListBuffer[Double]()
+  // 追踪当前批数据是否已满
   private var batchPivot = 0
+  // 截止到上一批数据处理完毕时的平均值和方差
+  private var historicalAvg = 0d
+  private var historicalVar = 0d
 
   private def addFunction(value: Any) = Add(sum, Cast(Literal(value, expr.dataType), calcType))
 
@@ -417,6 +423,44 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
       count += 1
       sum.update(addFunction(evaluatedExpr), input)
 
+      if (batchPivot < batchSize) {
+        batch += evaluatedExpr.asInstanceOf[Double]
+        batchPivot += 1
+      } else {
+        // batch 满了，结合历史数据的 avg 和 var 增量计算当前的 avg 和 var
+        var batchAvg: Double = batch.sum / batch.length
+        var batchVar: Double = batch.foldLeft(0d) { case (sum, sample) =>
+          sum + (sample - batchAvg) * (sample - batchAvg)
+        } / batch.length
+
+        var hCount = count - batchSize
+        var crtAvg = expr.dataType match {
+          case DecimalType.Fixed(_, _) =>
+            Cast(Divide(
+              Cast(sum, DecimalType.Unlimited),
+              Cast(Literal(count), DecimalType.Unlimited)), dataType).eval(null)
+          case _ =>
+            Divide(
+              Cast(sum, dataType),
+              Cast(Literal(count), dataType)).eval(null)
+        }
+        var crtSum = expr.dataType match {
+          case DecimalType.Fixed(_, _) =>
+            Cast(sum, DecimalType.Unlimited).eval(null)
+          case _ =>
+            Cast(sum, dataType).eval(null)
+        }
+
+        historicalVar = (
+          hCount * (historicalVar + math.pow(crtAvg.asInstanceOf[Double] - historicalAvg, 2.0)) +
+            batchSize * (batchVar + math.pow(crtAvg.asInstanceOf[Double] - batchAvg, 2.0))
+          ) / (hCount + batchSize)
+        historicalAvg = (crtSum.asInstanceOf[Double] - batch.sum) / (count - batch.length)
+
+        // 增量更新完毕，清空 batch
+        batch.clear()
+        batchPivot = 0
+      }
     }
   }
 }
@@ -454,18 +498,17 @@ case class OnlineSumFunction(expr: Expression, base: AggregateExpression)
 
   private val sum = MutableLiteral(null, calcType)
 
-  private val sq : Sqrt = Sqrt(expr)   // sqrt function
+  private val sq: Sqrt = Sqrt(expr) // sqrt function
 
-  private var curValSqrt : Double  = 0   // sqrt of current val
+  private var curValSqrt: Double = 0 // sqrt of current val
 
-  private var sumSqrt : Double = 0   // sqrt of sum
+  private var sumSqrt: Double = 0 // sqrt of sum
 
-  private var varianceSqrt : Double = 0 // sqrt of variance
+  private var varianceSqrt: Double = 0 // sqrt of variance
 
-  private var curSampleSizeSqrt : Double = 0 // sqrt of size of current sample
+  private var curSampleSizeSqrt: Double = 0 // sqrt of size of current sample
 
-  private var tableSizeSqrt : Double = 0 // sqrt of the table
-
+  private var tableSizeSqrt: Double = 0 // sqrt of the table
 
 
   private val addFunction = Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum))
