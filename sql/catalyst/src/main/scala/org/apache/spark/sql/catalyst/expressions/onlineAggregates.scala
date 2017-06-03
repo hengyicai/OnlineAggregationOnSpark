@@ -24,6 +24,9 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.util.collection.OpenHashSet
 
+class OnlineResult(result: Any,internal: Double, zone: Double){
+
+}
 
 case class OnlineMin(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
@@ -36,12 +39,16 @@ case class OnlineMin(child: Expression) extends PartialAggregate with trees.Unar
     SplitEvaluation(Min(partialMin.toAttribute), partialMin :: Nil)
   }
 
-  override def newInstance() = new MinFunction(child, this)
+  override def newInstance() = new OnlineMinFunction(child, this)
 }
 
+// change the eval out to a OnlineResult object
 case class OnlineMinFunction(expr: Expression, base: AggregateExpression)
   extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
+
+  var mockInternal = 0.8
+  var mockZone = 0.8
 
   val currentMin: MutableLiteral = MutableLiteral(null, expr.dataType)
   val cmp = GreaterThan(currentMin, expr)
@@ -54,7 +61,8 @@ case class OnlineMinFunction(expr: Expression, base: AggregateExpression)
     }
   }
 
-  override def eval(input: Row): Any = currentMin.value
+  override def eval(input: Row): Any = new OnlineResult(currentMin.value,mockInternal,mockZone)
+
 }
 
 case class OnlineMax(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
