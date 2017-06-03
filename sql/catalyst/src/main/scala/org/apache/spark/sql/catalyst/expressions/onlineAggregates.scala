@@ -21,6 +21,7 @@ import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.util.commonMath
 import org.apache.spark.util.collection.OpenHashSet
 
 import scala.collection.mutable.ListBuffer
@@ -397,8 +398,6 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
 
   override def eval(input: Row): Any = {
     var resVal: Any = null
-    var confidence: Double = 1.0
-    var errorBound: Double = 0.05
 
     if (count == 0L) {
       null
@@ -414,7 +413,55 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
             Cast(Literal(count), dataType)).eval(null)
       }
     }
+
+    updateHistorical()
+
+    val T = math.sqrt(historicalVar)
+    val errorBound: Double = 2.0
+    val confidence = commonMath.calcConfidence(errorBound, count, T)
+
+
     new OnlineResult(resVal, confidence, errorBound)
+  }
+
+  def calcBatchVar(): Double = {
+    val batchAvg: Double = batch.sum / batch.length
+    batch.foldLeft(0d) { case (sum, sample) =>
+      sum + (sample - batchAvg) * (sample - batchAvg)
+    } / batch.length
+  }
+
+  def updateHistorical(): Unit = {
+    // batch 满了，结合历史数据的 avg 和 var 增量计算当前的 avg 和 var
+    val batchAvg: Double = batch.sum / batch.length
+    val batchVar: Double = calcBatchVar()
+
+    val hCount = count - batch.length
+
+    val crtAvg = expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        Cast(Divide(
+          Cast(sum, DecimalType.Unlimited),
+          Cast(Literal(count), DecimalType.Unlimited)), dataType).eval(null)
+      case _ =>
+        Divide(
+          Cast(sum, dataType),
+          Cast(Literal(count), dataType)).eval(null)
+    }
+    val crtSum = expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        Cast(sum, DecimalType.Unlimited).eval(null)
+      case _ =>
+        Cast(sum, dataType).eval(null)
+    }
+
+    historicalVar = if (hCount == 0) batchVar else (
+      hCount * (historicalVar + math.pow(crtAvg.asInstanceOf[Double] - historicalAvg, 2.0)) +
+        batchSize * (batchVar + math.pow(crtAvg.asInstanceOf[Double] - batchAvg, 2.0))
+      ) / (hCount + batchSize)
+
+    historicalAvg = if (hCount == 0) batchAvg else (
+      crtSum.asInstanceOf[Double] - batch.sum) / (count - batch.length)
   }
 
   override def update(input: Row): Unit = {
@@ -427,40 +474,7 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
         batch += evaluatedExpr.asInstanceOf[Double]
         batchPivot += 1
       } else {
-        // batch 满了，结合历史数据的 avg 和 var 增量计算当前的 avg 和 var
-        var batchAvg: Double = batch.sum / batch.length
-        var batchVar: Double = batch.foldLeft(0d) { case (sum, sample) =>
-          sum + (sample - batchAvg) * (sample - batchAvg)
-        } / batch.length
-
-        var hCount = count - batchSize
-
-        var crtAvg = expr.dataType match {
-          case DecimalType.Fixed(_, _) =>
-            Cast(Divide(
-              Cast(sum, DecimalType.Unlimited),
-              Cast(Literal(count), DecimalType.Unlimited)), dataType).eval(null)
-          case _ =>
-            Divide(
-              Cast(sum, dataType),
-              Cast(Literal(count), dataType)).eval(null)
-        }
-        var crtSum = expr.dataType match {
-          case DecimalType.Fixed(_, _) =>
-            Cast(sum, DecimalType.Unlimited).eval(null)
-          case _ =>
-            Cast(sum, dataType).eval(null)
-        }
-
-
-        historicalVar = if (hCount == 0) batchVar else (
-          hCount * (historicalVar + math.pow(crtAvg.asInstanceOf[Double] - historicalAvg, 2.0)) +
-            batchSize * (batchVar + math.pow(crtAvg.asInstanceOf[Double] - batchAvg, 2.0))
-          ) / (hCount + batchSize)
-
-        historicalAvg = if (hCount == 0) batchAvg else (
-          crtSum.asInstanceOf[Double] - batch.sum) / (count - batch.length)
-
+        updateHistorical()
         // 增量更新完毕，清空 batch
         batch.clear()
         batchPivot = 0
