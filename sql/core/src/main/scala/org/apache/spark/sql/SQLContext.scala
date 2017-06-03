@@ -917,6 +917,27 @@ class SQLContext(@transient val sparkContext: SparkContext)
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}")
     }
   }
+  /**
+    * Executes a Online SQL using Spark, returning the result as a [[DataFrame]].
+    * First call df.sample, then execu sql query
+    *
+    * sqlText is like "df.groupby("name").avg().show()"
+    *
+    * @author Arvin
+    */
+  def onlineSql(df: DataFrame, sqlText: String): DataFrame = {
+
+    var sqlArgs: Array[String] = sqlText.split(".")
+
+
+    var fraction = 0.1
+
+    df.sample(false,fraction)
+
+      DataFrame(this, parseSql(sqlText))
+
+  }
+
 
   /**
    * Returns the specified table as a [[DataFrame]].
