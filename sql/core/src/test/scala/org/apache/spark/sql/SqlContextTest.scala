@@ -34,4 +34,10 @@ class SqlContextTest extends QueryTest{
 
   }
 
+  test("groupedData's onlineMin ") {
+
+
+  }
+
+
 }

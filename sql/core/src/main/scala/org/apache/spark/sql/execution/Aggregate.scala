@@ -161,6 +161,7 @@ case class Aggregate(
           var i = 0
           while (i < currentBuffer.length) {
             currentBuffer(i).update(currentRow)
+            println("current Min " + currentBuffer(i).eval(currentRow))
             i += 1
           }
         }

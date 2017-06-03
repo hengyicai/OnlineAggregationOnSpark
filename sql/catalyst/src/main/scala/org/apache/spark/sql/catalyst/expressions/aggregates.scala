@@ -114,6 +114,8 @@ case class MinFunction(expr: Expression, base: AggregateExpression) extends Aggr
     } else if(cmp.eval(input) == true) {
       currentMin.value = expr.eval(input)
     }
+    println("come into Min aggregate update")
+
   }
 
   override def eval(input: Row): Any = currentMin.value

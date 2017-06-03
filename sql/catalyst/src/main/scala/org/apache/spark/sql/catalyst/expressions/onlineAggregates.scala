@@ -18,22 +18,25 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
-
+import org.apache.spark.Logging
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.util.collection.OpenHashSet
 
-class OnlineResult(result: Any,internal: Double, zone: Double){
+class OnlineResult(result: Any,confidence: Double, bound: Double){
 
-  override def toString: String = s"$result # $internal # $zone"
+  override def toString: String = s"$result # $confidence # $bound"
 
 }
 
+// todo transfer size and confidence variable
 case class OnlineMin(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
+  println("onlineMin initialize ")
   override def nullable = true
-  override def dataType = child.dataType
+  // override def dataType = child.dataType
+  override def dataType:DataType = StringType
   override def toString = s"OnlineMIN($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -46,7 +49,9 @@ case class OnlineMin(child: Expression) extends PartialAggregate with trees.Unar
 
 // change the eval out to a OnlineResult object
 case class OnlineMinFunction(expr: Expression, base: AggregateExpression)
-  extends AggregateFunction {
+  extends AggregateFunction with Logging{
+  logError("onlineMin Func initialize ")
+
   def this() = this(null, null) // Required for serialization.
 
   var mockInternal = 0.8
@@ -61,9 +66,13 @@ case class OnlineMinFunction(expr: Expression, base: AggregateExpression)
     } else if(cmp.eval(input) == true) {
       currentMin.value = expr.eval(input)
     }
+    logError("come into online aggregate update")
   }
 
-  override def eval(input: Row): Any = new OnlineResult(currentMin.value,mockInternal,mockZone)
+  override def eval(input: Row): Any ={
+    logError("come into online aggregate update")
+    s"1 # $mockInternal # $mockZone".asInstanceOf[StringType]
+  }
 
 }
 

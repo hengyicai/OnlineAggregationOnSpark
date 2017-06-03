@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.types.NumericType
-
+import scala.reflect.runtime.universe.typeOf
 
 
 /**
@@ -64,6 +64,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
     }
     columnExprs.map { c =>
       val a = f(c)
+      println("aggregateExpression in GroupedData  " + a.toString )
       Alias(a, a.toString)()
     }
   }
@@ -209,6 +210,15 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames:_*)(Min)
+  }
+  /**
+    * Compute the onlineMin value for each numeric column for each group.
+    * The resulting [[DataFrame]] will also contain the grouping columns.
+    * When specified columns are given, only compute the min values for them.
+    */
+  @scala.annotation.varargs
+  def onlineMin(colNames: String*): DataFrame = {
+    aggregateNumericColumns(colNames:_*)(OnlineMin)
   }
 
   /**
