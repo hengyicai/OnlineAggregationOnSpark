@@ -23,8 +23,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.util.collection.OpenHashSet
+import scala.collection.mutable.ListBuffer
+
 
 class OnlineResult(result: Any,confidence: Double, bound: Double){
+
+
 
   override def toString: String = s"$result # $confidence # $bound"
 
@@ -37,6 +41,7 @@ case class OnlineMin(child: Expression) extends PartialAggregate with trees.Unar
   override def nullable = true
   // override def dataType = child.dataType
   override def dataType:DataType = StringType
+
   override def toString = s"OnlineMIN($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -63,7 +68,7 @@ case class OnlineMinFunction(expr: Expression, base: AggregateExpression)
   override def update(input: Row): Unit = {
     if (currentMin.value == null) {
       currentMin.value = expr.eval(input)
-    } else if(cmp.eval(input) == true) {
+    } else if (cmp.eval(input) == true) {
       currentMin.value = expr.eval(input)
     }
     logError("come into online aggregate update")
@@ -73,13 +78,16 @@ case class OnlineMinFunction(expr: Expression, base: AggregateExpression)
     logError("come into online aggregate update")
     s"1 # $mockInternal # $mockZone".asInstanceOf[StringType]
   }
+//  override def eval(input: Row): Any = new OnlineResult(currentMin.value, mockInternal, mockZone)
 
 }
 
 case class OnlineMax(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable = true
+
   override def dataType = child.dataType
+
   override def toString = s"MAX($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -100,7 +108,7 @@ case class OnlineMaxFunction(expr: Expression, base: AggregateExpression)
   override def update(input: Row): Unit = {
     if (currentMax.value == null) {
       currentMax.value = expr.eval(input)
-    } else if(cmp.eval(input) == true) {
+    } else if (cmp.eval(input) == true) {
       currentMax.value = expr.eval(input)
     }
   }
@@ -112,7 +120,9 @@ case class OnlineCount(child: Expression)
   extends PartialAggregate with trees.UnaryNode[Expression] {
 
   override def nullable = false
+
   override def dataType = LongType
+
   override def toString = s"COUNT($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -129,8 +139,11 @@ case class OnlineCountDistinct(expressions: Seq[Expression]) extends PartialAggr
   override def children = expressions
 
   override def nullable = false
+
   override def dataType = LongType
+
   override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")})"
+
   override def newInstance() = new CountDistinctFunction(expressions, this)
 
   override def asPartial = {
@@ -145,15 +158,19 @@ case class OnlineCollectHashSet(expressions: Seq[Expression]) extends AggregateE
   def this() = this(null)
 
   override def children = expressions
+
   override def nullable = false
+
   override def dataType = ArrayType(expressions.head.dataType)
+
   override def toString = s"AddToHashSet(${expressions.mkString(",")})"
+
   override def newInstance() = new CollectHashSetFunction(expressions, this)
 }
 
 case class OnlineCollectHashSetFunction(
-    @transient expr: Seq[Expression],
-    @transient base: AggregateExpression)
+                                         @transient expr: Seq[Expression],
+                                         @transient base: AggregateExpression)
   extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
@@ -179,15 +196,19 @@ case class OnlineCombineSetsAndCount(inputSet: Expression) extends AggregateExpr
   def this() = this(null)
 
   override def children = inputSet :: Nil
+
   override def nullable = false
+
   override def dataType = LongType
+
   override def toString = s"CombineAndCount($inputSet)"
+
   override def newInstance() = new CombineSetsAndCountFunction(inputSet, this)
 }
 
 case class OnlineCombineSetsAndCountFunction(
-    @transient inputSet: Expression,
-    @transient base: AggregateExpression)
+                                              @transient inputSet: Expression,
+                                              @transient base: AggregateExpression)
   extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
@@ -213,7 +234,7 @@ case class OnlineAverage(child: Expression)
 
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 4, scale + 4)  // Add 4 digits after decimal point, like Hive
+      DecimalType(precision + 4, scale + 4) // Add 4 digits after decimal point, like Hive
     case DecimalType.Unlimited =>
       DecimalType.Unlimited
     case _ =>
@@ -247,7 +268,7 @@ case class OnlineAverage(child: Expression)
     }
   }
 
-  override def newInstance() = new AverageFunction(child, this)
+  override def newInstance() = new OnlineAverageFunction(child, this)
 }
 
 case class OnlineSum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -256,7 +277,7 @@ case class OnlineSum(child: Expression) extends PartialAggregate with trees.Unar
 
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
+      DecimalType(precision + 10, scale) // Add 10 digits left of decimal point, like Hive
     case DecimalType.Unlimited =>
       DecimalType.Unlimited
     case _ =>
@@ -281,23 +302,27 @@ case class OnlineSum(child: Expression) extends PartialAggregate with trees.Unar
     }
   }
 
-  override def newInstance() = new SumFunction(child, this)
+  override def newInstance() = new OnlineSumFunction(child, this)
 }
 
 case class OnlineSumDistinct(child: Expression)
   extends PartialAggregate with trees.UnaryNode[Expression] {
 
   def this() = this(null)
+
   override def nullable = true
+
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
+      DecimalType(precision + 10, scale) // Add 10 digits left of decimal point, like Hive
     case DecimalType.Unlimited =>
       DecimalType.Unlimited
     case _ =>
       child.dataType
   }
+
   override def toString = s"SUM(DISTINCT ${child})"
+
   override def newInstance() = new SumDistinctFunction(child, this)
 
   override def asPartial = {
@@ -313,15 +338,19 @@ case class OnlineCombineSetsAndSum(inputSet: Expression, base: Expression)
   def this() = this(null, null)
 
   override def children = inputSet :: Nil
+
   override def nullable = true
+
   override def dataType = base.dataType
+
   override def toString = s"CombineAndSum($inputSet)"
+
   override def newInstance() = new CombineSetsAndSumFunction(inputSet, this)
 }
 
 case class OnlineCombineSetsAndSumFunction(
-    @transient inputSet: Expression,
-    @transient base: AggregateExpression)
+                                            @transient inputSet: Expression,
+                                            @transient base: AggregateExpression)
   extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.
@@ -366,14 +395,27 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
 
   private var count: Long = _
   private val sum = MutableLiteral(zero.eval(null), calcType)
+  // 每一批数据的大小
+  private val batchSize = 100
+  // 存储当前批数据
+  private var batch = new ListBuffer[Double]()
+  // 追踪当前批数据是否已满
+  private var batchPivot = 0
+  // 截止到上一批数据处理完毕时的平均值和方差
+  private var historicalAvg = 0d
+  private var historicalVar = 0d
 
   private def addFunction(value: Any) = Add(sum, Cast(Literal(value, expr.dataType), calcType))
 
   override def eval(input: Row): Any = {
+    var resVal: Any = null
+    var confidence: Double = 1.0
+    var errorBound: Double = 0.05
+
     if (count == 0L) {
       null
     } else {
-      expr.dataType match {
+      resVal = expr.dataType match {
         case DecimalType.Fixed(_, _) =>
           Cast(Divide(
             Cast(sum, DecimalType.Unlimited),
@@ -384,6 +426,7 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
             Cast(Literal(count), dataType)).eval(null)
       }
     }
+    new OnlineResult(resVal, confidence, errorBound)
   }
 
   override def update(input: Row): Unit = {
@@ -391,6 +434,49 @@ case class OnlineAverageFunction(expr: Expression, base: AggregateExpression)
     if (evaluatedExpr != null) {
       count += 1
       sum.update(addFunction(evaluatedExpr), input)
+
+      if (batchPivot < batchSize) {
+        batch += evaluatedExpr.asInstanceOf[Double]
+        batchPivot += 1
+      } else {
+        // batch 满了，结合历史数据的 avg 和 var 增量计算当前的 avg 和 var
+        var batchAvg: Double = batch.sum / batch.length
+        var batchVar: Double = batch.foldLeft(0d) { case (sum, sample) =>
+          sum + (sample - batchAvg) * (sample - batchAvg)
+        } / batch.length
+
+        var hCount = count - batchSize
+
+        var crtAvg = expr.dataType match {
+          case DecimalType.Fixed(_, _) =>
+            Cast(Divide(
+              Cast(sum, DecimalType.Unlimited),
+              Cast(Literal(count), DecimalType.Unlimited)), dataType).eval(null)
+          case _ =>
+            Divide(
+              Cast(sum, dataType),
+              Cast(Literal(count), dataType)).eval(null)
+        }
+        var crtSum = expr.dataType match {
+          case DecimalType.Fixed(_, _) =>
+            Cast(sum, DecimalType.Unlimited).eval(null)
+          case _ =>
+            Cast(sum, dataType).eval(null)
+        }
+
+
+        historicalVar = if (hCount == 0) batchVar else (
+          hCount * (historicalVar + math.pow(crtAvg.asInstanceOf[Double] - historicalAvg, 2.0)) +
+            batchSize * (batchVar + math.pow(crtAvg.asInstanceOf[Double] - batchAvg, 2.0))
+          ) / (hCount + batchSize)
+
+        historicalAvg = if (hCount == 0) batchAvg else (
+          crtSum.asInstanceOf[Double] - batch.sum) / (count - batch.length)
+
+        // 增量更新完毕，清空 batch
+        batch.clear()
+        batchPivot = 0
+      }
     }
   }
 }
@@ -428,9 +514,23 @@ case class OnlineSumFunction(expr: Expression, base: AggregateExpression)
 
   private val sum = MutableLiteral(null, calcType)
 
+  private val sq: Sqrt = Sqrt(expr) // sqrt function
+
+  private var curValSqrt: Double = 0 // sqrt of current val
+
+  private var sumSqrt: Double = 0 // sqrt of sum
+
+  private var varianceSqrt: Double = 0 // sqrt of variance
+
+  private var curSampleSizeSqrt: Double = 0 // sqrt of size of current sample
+
+  private var tableSizeSqrt: Double = 0 // sqrt of the table
+
+
   private val addFunction = Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum))
 
   override def update(input: Row): Unit = {
+    curValSqrt += sq.eval(input).asInstanceOf[Double]
     sum.update(addFunction, input)
   }
 
@@ -440,6 +540,9 @@ case class OnlineSumFunction(expr: Expression, base: AggregateExpression)
         Cast(sum, dataType).eval(null)
       case _ => sum.eval(null)
     }
+
+    sumSqrt = math.sqrt(sum.value.asInstanceOf[Double])
+    varianceSqrt = tableSizeSqrt * (curValSqrt - sumSqrt / curSampleSizeSqrt)
   }
 }
 
@@ -470,8 +573,8 @@ case class OnlineSumDistinctFunction(expr: Expression, base: AggregateExpression
 }
 
 case class OnlineCountDistinctFunction(
-    @transient expr: Seq[Expression],
-    @transient base: AggregateExpression)
+                                        @transient expr: Seq[Expression],
+                                        @transient base: AggregateExpression)
   extends AggregateFunction {
 
   def this() = this(null, null) // Required for serialization.

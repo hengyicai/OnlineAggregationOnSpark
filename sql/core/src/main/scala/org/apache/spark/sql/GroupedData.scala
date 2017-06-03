@@ -199,7 +199,7 @@ class GroupedData protected[sql](df: DataFrame, groupingExprs: Seq[Expression]) 
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames:_*)(Average)
+    aggregateNumericColumns(colNames:_*)(OnlineAverage)
   }
 
   /**
