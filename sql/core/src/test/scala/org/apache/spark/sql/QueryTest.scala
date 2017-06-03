@@ -67,7 +67,8 @@ class QueryTest extends PlanTest {
     checkAnswer(df, Seq(expectedAnswer))
   }
 
-  def sqlTest(sqlString: String, expectedAnswer: Seq[Row])(implicit sqlContext: SQLContext): Unit = {
+  def sqlTest(sqlString: String, expectedAnswer: Seq[Row])
+             (implicit sqlContext: SQLContext): Unit = {
     test(sqlString) {
       checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
     }

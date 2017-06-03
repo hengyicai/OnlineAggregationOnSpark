@@ -15,7 +15,23 @@
  * limitations under the License.
  */
 
-/**
- * Twitter feed receiver for spark streaming.
- */
-package org.apache.spark.streaming.twitter;
+package org.apache.spark.sql
+
+import org.apache.spark.sql.{QueryTest, Row, TestData}
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.test.TestSQLContext._
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.testng
+
+class SqlContextTest extends QueryTest{
+
+
+  import org.apache.spark.sql.test.TestSQLContext.implicits._
+
+  val sqlCtx = TestSQLContext
+
+  test("scala split ") {
+
+  }
+
+}
