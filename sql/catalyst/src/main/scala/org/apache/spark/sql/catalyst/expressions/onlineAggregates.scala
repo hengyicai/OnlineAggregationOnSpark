@@ -454,9 +454,24 @@ case class OnlineSumFunction(expr: Expression, base: AggregateExpression)
 
   private val sum = MutableLiteral(null, calcType)
 
+  private val sq : Sqrt = Sqrt(expr)   // sqrt function
+
+  private var curValSqrt : Double  = 0   // sqrt of current val
+
+  private var sumSqrt : Double = 0   // sqrt of sum
+
+  private var varianceSqrt : Double = 0 // sqrt of variance
+
+  private var curSampleSizeSqrt : Double = 0 // sqrt of size of current sample
+
+  private var tableSizeSqrt : Double = 0 // sqrt of the table
+
+
+
   private val addFunction = Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum))
 
   override def update(input: Row): Unit = {
+    curValSqrt += sq.eval(input).asInstanceOf[Double]
     sum.update(addFunction, input)
   }
 
@@ -466,6 +481,9 @@ case class OnlineSumFunction(expr: Expression, base: AggregateExpression)
         Cast(sum, dataType).eval(null)
       case _ => sum.eval(null)
     }
+
+    sumSqrt = math.sqrt(sum.value.asInstanceOf[Double])
+    varianceSqrt = tableSizeSqrt * (curValSqrt - sumSqrt / curSampleSizeSqrt)
   }
 }
 
