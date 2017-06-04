@@ -558,35 +558,120 @@ case class OnlineSumFunction(expr: Expression, base: AggregateExpression)
 
   private val sum = MutableLiteral(null, calcType)
 
-  private val sq: Sqrt = Sqrt(expr) // sqrt function
+  private var count: Long = _
+  // 每一批数据的大小
+  private val batchSize = 100
+  // 存储当前批数据
+  private var batch = new ListBuffer[Double]()
+  // 追踪当前批数据是否已满
+  private var batchPivot = 0
+  // 截止到上一批数据处理完毕时的平均值和方差
+  private var historicalAvg = 0d
+  private var historicalVar = 0d
 
-  private var curValSqrt: Double = 0 // sqrt of current val
+  // private val sq: Sqrt = Sqrt(expr) // sqrt function
 
-  private var sumSqrt: Double = 0 // sqrt of sum
+  // private var curValSqrt: Double = 0 // sqrt of current val
 
-  private var varianceSqrt: Double = 0 // sqrt of variance
+  // private var sumSqrt: Double = 0 // sqrt of sum
 
-  private var curSampleSizeSqrt: Double = 0 // sqrt of size of current sample
+  // private var varianceSqrt: Double = 0 // sqrt of variance
+
+  // private var curSampleSizeSqrt: Double = 0 // sqrt of size of current sample
 
   private var tableSizeSqrt: Double = 0 // sqrt of the table
 
 
   private val addFunction = Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(expr, calcType)), sum))
 
+  def calcBatchVar(): Double = {
+    val batchAvg: Double = batch.sum / batch.length
+    var sampleSqrt : Double = batch.foldLeft(0d) { case (sum, sample) =>
+      sum + math.sqrt(sample.asInstanceOf[Double])
+    }
+    var sampleSumSqrt : Double = math.sqrt(batch.foldLeft(0d) { case (sum, sample) =>
+      sum + sample.asInstanceOf[Double]
+    } / batch.length)
+
+    var curBatchVar : Double = math.sqrt(tableSizeSqrt) * (sampleSqrt - sampleSumSqrt)
+
+    return curBatchVar
+  }
+
+  def updateHistorical(): Unit = {
+    // batch 满了，结合历史数据的 avg 和 var 增量计算当前的 avg 和 var
+    val batchAvg: Double = batch.sum / batch.length
+    val batchVar: Double = calcBatchVar()
+
+    val hCount = count - batch.length
+
+    val crtAvg = expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        Cast(Divide(
+          Cast(sum, DecimalType.Unlimited),
+          Cast(Literal(count), DecimalType.Unlimited)), dataType).eval(null)
+      case _ =>
+        Divide(
+          Cast(sum, dataType),
+          Cast(Literal(count), dataType)).eval(null)
+    }
+    val crtSum = expr.dataType match {
+      case DecimalType.Fixed(_, _) =>
+        Cast(sum, DecimalType.Unlimited).eval(null)
+      case _ =>
+        Cast(sum, dataType).eval(null)
+    }
+
+    historicalVar = if (hCount == 0) batchVar
+    else (
+      hCount * (historicalVar + math.pow(crtAvg.asInstanceOf[Double] - historicalAvg, 2.0)) +
+        batchSize * (batchVar + math.pow(crtAvg.asInstanceOf[Double] - batchAvg, 2.0))
+      ) / (hCount + batchSize)
+
+    historicalAvg = if (hCount == 0) batchAvg
+    else (
+      crtSum.asInstanceOf[Double] - batch.sum) / (count - batch.length)
+  }
+
   override def update(input: Row): Unit = {
-    curValSqrt += sq.eval(input).asInstanceOf[Double]
-    sum.update(addFunction, input)
+    // curValSqrt += sq.eval(input).asInstanceOf[Double]
+    val evaluatedExpr = expr.eval(input)
+    if (evaluatedExpr != null) {
+      count += 1
+      sum.update(addFunction, input)
+
+      if (batchPivot < batchSize) {
+        batch += evaluatedExpr.asInstanceOf[Double]
+        batchPivot += 1
+      } else {
+        updateHistorical()
+        // 增量更新完毕，清空 batch
+        batch.clear()
+        batchPivot = 0
+      }
+    }
+
   }
 
   override def eval(input: Row): Any = {
-    expr.dataType match {
+    var resVal: Any = null
+
+    resVal = expr.dataType match {
       case DecimalType.Fixed(_, _) =>
         Cast(sum, dataType).eval(null)
       case _ => sum.eval(null)
     }
 
-    sumSqrt = math.sqrt(sum.value.asInstanceOf[Double])
-    varianceSqrt = tableSizeSqrt * (curValSqrt - sumSqrt / curSampleSizeSqrt)
+    updateHistorical()
+
+    val T = math.sqrt(historicalVar)
+    val errorBound: Double = 2.0
+    val confidence = commonMath.calcConfidence(errorBound, count, T)
+
+    new OnlineResult(resVal, confidence, errorBound)
+
+   // sumSqrt = math.sqrt(sum.value.asInstanceOf[Double])
+    // varianceSqrt = tableSizeSqrt * (curValSqrt - sumSqrt / curSampleSizeSqrt)
   }
 }
 
